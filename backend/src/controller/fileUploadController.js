@@ -10,6 +10,30 @@ function normalizeResourceType(rt) {
   return "image";
 }
 
+function isPdfFile(file) {
+  const mime = (file.mimetype || "").toLowerCase();
+  const name = (file.originalname || "").toLowerCase();
+  return mime === "application/pdf" || name.endsWith(".pdf");
+}
+
+/** Some accounts return 401 for PDFs under /image/upload/; raw + optional signing fixes delivery. */
+function shouldSignDelivery(resourceType) {
+  if (process.env.CLOUDINARY_SIGN_DELIVERY === "true") return true;
+  return normalizeResourceType(resourceType) === "raw";
+}
+
+function buildDeliveryUrl(result) {
+  const rt = normalizeResourceType(result.resource_type);
+  const opts = {
+    resource_type: rt,
+    secure: true,
+    urlAnalytics: false,
+  };
+  if (result.version != null) opts.version = result.version;
+  if (shouldSignDelivery(rt)) opts.sign_url = true;
+  return cloudinary.url(result.public_id, opts);
+}
+
 /**
  * Value for fl_attachment:… must not contain ".", ":", "/", spaces, etc. or Cloudinary returns HTTP 400.
  * @see https://cloudinary.com/documentation/image_delivery_options
@@ -19,31 +43,30 @@ function cloudinarySafeAttachmentFilename(name) {
   return n.replace(/[^a-zA-Z0-9_-]/g, "_").replace(/_+/g, "_").slice(0, 120) || "download";
 }
 
-/** Delivery URL that sets Content-Disposition attachment (Cloudinary SDK). */
-function buildCloudinaryDownloadUrl(publicId, resourceType, filename) {
+/** Delivery URL with attachment disposition (Cloudinary SDK). */
+function buildCloudinaryDownloadUrl(result, filename) {
   const safe = cloudinarySafeAttachmentFilename(filename);
-  const rt = normalizeResourceType(resourceType);
-  return cloudinary.url(publicId, {
+  const rt = normalizeResourceType(result.resource_type);
+  const opts = {
     resource_type: rt,
     secure: true,
     flags: `attachment:${safe}`,
     urlAnalytics: false,
-  });
+  };
+  if (result.version != null) opts.version = result.version;
+  if (shouldSignDelivery(rt)) opts.sign_url = true;
+  return cloudinary.url(result.public_id, opts);
 }
 
 function filePayload(result, file) {
-  const url = result.secure_url;
+  const url = buildDeliveryUrl(result);
   return {
     filename: file.originalname,
     url,
     public_id: result.public_id,
     mimetype: file.mimetype || "",
     resource_type: result.resource_type || "image",
-    download_url: buildCloudinaryDownloadUrl(
-      result.public_id,
-      result.resource_type,
-      file.originalname
-    ),
+    download_url: buildCloudinaryDownloadUrl(result, file.originalname),
   };
 }
 
@@ -71,24 +94,25 @@ export const uploadFile = async (req, res) => {
       });
     }
 
-    const streamUpload = (buffer) => {
+    const streamUpload = (file) => {
       return new Promise((resolve, reject) => {
+        const uploadOpts = {
+          folder: "quickshare",
+          resource_type: isPdfFile(file) ? "raw" : "auto",
+        };
         const stream = cloudinary.uploader.upload_stream(
-          {
-            folder: "quickshare",
-            resource_type: "auto",
-          },
+          uploadOpts,
           (error, result) => {
             if (error) reject(error);
             else resolve(result);
           }
         );
 
-        streamifier.createReadStream(buffer).pipe(stream);
+        streamifier.createReadStream(file.buffer).pipe(stream);
       });
     };
 
-    const uploadResults = await Promise.all(files.map((file) => streamUpload(file.buffer)));
+    const uploadResults = await Promise.all(files.map((file) => streamUpload(file)));
 
     const savedFileRecord = await File.create({
       sessionId,
