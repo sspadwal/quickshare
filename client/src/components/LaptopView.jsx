@@ -23,6 +23,8 @@ function fileKind(file) {
 function IncomingFileCard({ file }) {
   const kind = fileKind(file);
   const downloadHref = file.download_url || cloudinaryAttachmentUrl(file.url, file.filename);
+  const [downloadBusy, setDownloadBusy] = useState(false);
+
   const btnStyle = {
     display: 'inline-block',
     marginRight: 8,
@@ -35,6 +37,28 @@ function IncomingFileCard({ file }) {
     textDecoration: 'none',
     fontSize: '14px',
     cursor: 'pointer',
+  };
+
+  const runDownload = async () => {
+    setDownloadBusy(true);
+    try {
+      const res = await fetch(downloadHref, { mode: 'cors' });
+      if (!res.ok) throw new Error('fetch failed');
+      const blob = await res.blob();
+      const objectUrl = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = objectUrl;
+      a.download = file.filename || 'download';
+      a.rel = 'noopener';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(objectUrl);
+    } catch {
+      window.open(downloadHref, '_blank', 'noopener,noreferrer');
+    } finally {
+      setDownloadBusy(false);
+    }
   };
 
   return (
@@ -84,9 +108,14 @@ function IncomingFileCard({ file }) {
       ) : null}
 
       <div>
-        <a href={downloadHref} style={btnStyle} download={file.filename}>
-          Download
-        </a>
+        <button
+          type="button"
+          style={{ ...btnStyle, fontFamily: 'inherit' }}
+          disabled={downloadBusy}
+          onClick={() => void runDownload()}
+        >
+          {downloadBusy ? 'Preparing…' : 'Download'}
+        </button>
         <a href={file.url} target="_blank" rel="noreferrer" style={{ ...btnStyle, background: '#fff' }}>
           Open in new tab
         </a>
@@ -95,7 +124,7 @@ function IncomingFileCard({ file }) {
   );
 }
 
-function LaptopView({ sessionId, sessionExpiresAt, files, status, onCreateSession }) {
+function LaptopView({ sessionId, sessionExpiresAt, mobileConnected, files, status, onCreateSession }) {
   const [remainingSec, setRemainingSec] = useState(0);
 
   useEffect(() => {
@@ -120,7 +149,14 @@ function LaptopView({ sessionId, sessionExpiresAt, files, status, onCreateSessio
   return (
     <div style={{ padding: '20px' }}>
       <h1>QuickShare Laptop</h1>
-      <p>Scan this QR code from your mobile browser.</p>
+      {!mobileConnected ? (
+        <p>Scan this QR code from your mobile browser.</p>
+      ) : (
+        <p style={{ color: '#166534', maxWidth: 560 }}>
+          Mobile connected — the QR code is hidden. Files you receive are listed below. Use <strong>New QR code</strong>{' '}
+          to start another transfer.
+        </p>
+      )}
       {needsLanHint ? (
         <p style={{ maxWidth: 520, color: '#b45309', background: '#fffbeb', padding: '12px', borderRadius: 8 }}>
           You opened this page on <strong>localhost</strong>. Your phone cannot reach your PC that way.
@@ -132,12 +168,21 @@ function LaptopView({ sessionId, sessionExpiresAt, files, status, onCreateSessio
       ) : null}
       {sessionId ? (
         <div>
-          <QRCodeSVG value={qrValue} size={220} />
-          <p>Session: {sessionId}</p>
-          <p>
-            Expires in: {formatRemaining(remainingSec)}
-            {remainingSec <= 0 ? ' — refresh the page for a new QR code' : ''}
-          </p>
+          {!mobileConnected ? (
+            <>
+              <QRCodeSVG value={qrValue} size={220} />
+              <p>Session: {sessionId}</p>
+              <p>
+                Expires in: {formatRemaining(remainingSec)}
+                {remainingSec <= 0 ? ' — refresh the page for a new QR code' : ''}
+              </p>
+            </>
+          ) : (
+            <p style={{ color: '#52525b' }}>
+              Session expires in: {formatRemaining(remainingSec)}
+              {remainingSec <= 0 ? ' — start a new session with the button below.' : ''}
+            </p>
+          )}
           <p>
             <button type="button" onClick={() => onCreateSession?.()}>
               New QR code
@@ -150,7 +195,9 @@ function LaptopView({ sessionId, sessionExpiresAt, files, status, onCreateSessio
       <div style={{ marginTop: '20px' }}>
         <h2>Incoming files</h2>
         <p style={{ color: '#71717a', fontSize: '14px', maxWidth: 560 }}>
-          Files are removed from Cloudinary about 15 minutes after upload (same as the server cleanup job).
+          Files are removed from Cloudinary about 15 minutes after upload. If uploads never disappear from
+          Cloudinary, remove any old TTL index on <code>files.expiresAt</code> in MongoDB (see backend{' '}
+          <code>.env.example</code>).
         </p>
         {files.length ? (
           <ul style={{ paddingLeft: 0 }}>

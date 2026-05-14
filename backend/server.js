@@ -60,6 +60,25 @@ function resolveCorsOrigin() {
   return isProd ? false : true;
 }
 
+async function destroyCloudinaryAsset(publicId, preferredType) {
+  const order =
+    preferredType && ["image", "raw", "video"].includes(preferredType)
+      ? [preferredType, ...["image", "raw", "video"].filter((t) => t !== preferredType)]
+      : ["image", "raw", "video"];
+  for (const resource_type of order) {
+    try {
+      const r = await cloudinary.uploader.destroy(publicId, {
+        resource_type,
+        invalidate: true,
+      });
+      if (r.result === "ok" || r.result === "not found") return;
+    } catch (e) {
+      /* try next resource_type */
+    }
+  }
+  console.warn("Cloudinary destroy failed for public_id:", publicId);
+}
+
 const deleteExpiredFiles = async () => {
   try {
     const now = new Date();
@@ -67,11 +86,11 @@ const deleteExpiredFiles = async () => {
     if (!expiredFiles.length) return;
 
     for (const file of expiredFiles) {
-      await Promise.all(
-        file.publicIds.map((publicId) =>
-          cloudinary.uploader.destroy(publicId, { resource_type: "auto" })
-        )
-      );
+      for (let i = 0; i < file.publicIds.length; i++) {
+        const publicId = file.publicIds[i];
+        const preferred = file.resourceTypes?.[i];
+        await destroyCloudinaryAsset(publicId, preferred);
+      }
       await File.deleteOne({ _id: file._id });
     }
   } catch (error) {
@@ -165,8 +184,12 @@ const startServer = async () => {
     setSocketServer(io);
 
     io.on("connection", (socket) => {
-      socket.on("joinSession", (sessionId) => {
+      socket.on("joinSession", (sessionId, role = "laptop") => {
+        if (!sessionId || typeof sessionId !== "string") return;
         socket.join(sessionId);
+        if (role === "mobile") {
+          socket.to(sessionId).emit("mobile.joined", { sessionId });
+        }
       });
     });
 

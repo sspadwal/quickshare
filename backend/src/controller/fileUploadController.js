@@ -3,7 +3,24 @@ import streamifier from "streamifier";
 import { File } from "../models/files.models.js";
 import { Session } from "../models/session.models.js";
 import { getSocketServer } from "../config/socket.js";
-import { cloudinaryAttachmentUrl } from "../utils/cloudinaryAttachmentUrl.js";
+
+function normalizeResourceType(rt) {
+  if (rt === "video") return "video";
+  if (rt === "raw") return "raw";
+  return "image";
+}
+
+/** Delivery URL that sets Content-Disposition attachment (works with Cloudinary SDK). */
+function buildCloudinaryDownloadUrl(publicId, resourceType, filename) {
+  const safe = String(filename || "download").replace(/[^\w.\-]/g, "_").slice(0, 150) || "download";
+  const rt = normalizeResourceType(resourceType);
+  return cloudinary.url(publicId, {
+    resource_type: rt,
+    secure: true,
+    flags: `attachment:${safe}`,
+    urlAnalytics: false,
+  });
+}
 
 function filePayload(result, file) {
   const url = result.secure_url;
@@ -12,8 +29,12 @@ function filePayload(result, file) {
     url,
     public_id: result.public_id,
     mimetype: file.mimetype || "",
-    resource_type: result.resource_type || "auto",
-    download_url: cloudinaryAttachmentUrl(url, file.originalname),
+    resource_type: result.resource_type || "image",
+    download_url: buildCloudinaryDownloadUrl(
+      result.public_id,
+      result.resource_type,
+      file.originalname
+    ),
   };
 }
 
@@ -65,12 +86,13 @@ export const uploadFile = async (req, res) => {
       filenames: files.map((file) => file.originalname),
       publicIds: uploadResults.map((result) => result.public_id),
       urls: uploadResults.map((result) => result.secure_url),
+      resourceTypes: uploadResults.map((result) => normalizeResourceType(result.resource_type)),
       expiresAt: new Date(Date.now() + 15 * 60 * 1000),
     });
 
     const io = getSocketServer();
     if (io) {
-      io.to(sessionId).emit('file.uploaded', {
+      io.to(sessionId).emit("file.uploaded", {
         sessionId,
         files: uploadResults.map((result, index) => filePayload(result, files[index])),
       });
@@ -81,7 +103,6 @@ export const uploadFile = async (req, res) => {
       files: uploadResults.map((result, index) => filePayload(result, files[index])),
       sessionId: savedFileRecord.sessionId,
     });
-
   } catch (error) {
     res.status(500).json({
       message: error.message,

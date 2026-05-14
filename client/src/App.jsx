@@ -11,14 +11,19 @@ function App() {
   const [sessionId, setSessionId] = useState(sessionParam || '');
   const [status, setStatus] = useState('');
   const [files, setFiles] = useState([]);
-  const [socket, setSocket] = useState(null);
+  const [mobileConnected, setMobileConnected] = useState(false);
 
   const {
     sessionId: generatedSessionId,
     sessionExpiresAt,
     status: sessionStatus,
-    createSession,
+    createSession: createSessionFromHook,
   } = useSession();
+
+  const createSession = async () => {
+    setMobileConnected(false);
+    await createSessionFromHook();
+  };
 
   useEffect(() => {
     if (sessionParam) {
@@ -34,10 +39,17 @@ function App() {
 
     const backendUrl = getBackendBaseUrl();
     const newSocket = io(backendUrl, { transports: ['websocket'] });
-    setSocket(newSocket);
+
+    const role = sessionParam ? 'mobile' : 'laptop';
 
     newSocket.on('connect', () => {
-      newSocket.emit('joinSession', sessionId);
+      newSocket.emit('joinSession', sessionId, role);
+    });
+
+    newSocket.on('mobile.joined', () => {
+      if (!sessionParam) {
+        setMobileConnected(true);
+      }
     });
 
     newSocket.on('file.uploaded', (payload) => {
@@ -54,7 +66,7 @@ function App() {
     return () => {
       newSocket.disconnect();
     };
-  }, [sessionId]);
+  }, [sessionId, sessionParam]);
 
   const uploadFiles = async (selectedFiles) => {
     if (!selectedFiles.length) {
@@ -93,6 +105,7 @@ function App() {
     <LaptopView
       sessionId={sessionId}
       sessionExpiresAt={sessionExpiresAt}
+      mobileConnected={mobileConnected}
       files={files}
       status={status}
       onCreateSession={createSession}

@@ -20,7 +20,11 @@ const fileSchema = new mongoose.Schema({
     expiresAt: {
         type: Date,
         required: true,
-        index: { expires: 0 },
+        index: true,
+    },
+    resourceTypes: {
+        type: [String],
+        default: [],
     },
 });
 
