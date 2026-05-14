@@ -2,12 +2,15 @@ import express from 'express';
 import crypto from 'crypto';
 import { Session } from '../models/session.models.js';
 
+/** Must stay in sync with upload / file TTL expectations (long enough to scan QR and upload). */
+const SESSION_TTL_MS = 15 * 60 * 1000;
+
 const router = express.Router();
 
 router.post('/new', async (req, res) => {
   try {
     const sessionId = crypto.randomUUID();
-    const expiresAt = new Date(Date.now() + 15 * 1000);
+    const expiresAt = new Date(Date.now() + SESSION_TTL_MS);
 
     await Session.create({ sessionId, expiresAt });
 

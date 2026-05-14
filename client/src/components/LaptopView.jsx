@@ -1,17 +1,29 @@
 import { useEffect, useState } from 'react';
 import { QRCodeSVG } from 'qrcode.react';
 
-function LaptopView({ sessionId, files, status, onCreateSession }) {
-  const [countdown, setCountdown] = useState(15);
+function formatRemaining(totalSeconds) {
+  if (totalSeconds <= 0) return '0:00';
+  const m = Math.floor(totalSeconds / 60);
+  const s = totalSeconds % 60;
+  return `${m}:${String(s).padStart(2, '0')}`;
+}
+
+function LaptopView({ sessionId, sessionExpiresAt, files, status, onCreateSession }) {
+  const [remainingSec, setRemainingSec] = useState(0);
 
   useEffect(() => {
-    setCountdown(15);
-    const countdownTimer = setInterval(() => {
-      setCountdown((value) => (value <= 1 ? 15 : value - 1));
-    }, 1000);
-
-    return () => clearInterval(countdownTimer);
-  }, [sessionId]);
+    if (!sessionExpiresAt) {
+      setRemainingSec(0);
+      return;
+    }
+    const end = new Date(sessionExpiresAt).getTime();
+    const tick = () => {
+      setRemainingSec(Math.max(0, Math.floor((end - Date.now()) / 1000)));
+    };
+    tick();
+    const id = setInterval(tick, 1000);
+    return () => clearInterval(id);
+  }, [sessionExpiresAt]);
 
   const publicOrigin = import.meta.env.VITE_PUBLIC_APP_ORIGIN || window.location.origin;
   const qrValue = `${publicOrigin}?session=${sessionId}`;
@@ -35,7 +47,15 @@ function LaptopView({ sessionId, files, status, onCreateSession }) {
         <div>
           <QRCodeSVG value={qrValue} size={220} />
           <p>Session: {sessionId}</p>
-          <p>Expires in: {countdown} seconds</p>
+          <p>
+            Expires in: {formatRemaining(remainingSec)}
+            {remainingSec <= 0 ? ' — refresh the page for a new QR code' : ''}
+          </p>
+          <p>
+            <button type="button" onClick={() => onCreateSession?.()}>
+              New QR code
+            </button>
+          </p>
         </div>
       ) : (
         <p>Creating session...</p>

@@ -3,6 +3,7 @@ import { getBackendBaseUrl } from '../lib/apiBase';
 
 export function useSession() {
   const [sessionId, setSessionId] = useState('');
+  const [sessionExpiresAt, setSessionExpiresAt] = useState(null);
   const [status, setStatus] = useState('');
 
   const createSession = async () => {
@@ -14,7 +15,10 @@ export function useSession() {
       const data = await response.json();
       if (data.sessionId) {
         setSessionId(data.sessionId);
-        setStatus('QR code refreshed');
+        if (data.expiresAt) {
+          setSessionExpiresAt(data.expiresAt);
+        }
+        setStatus('Session ready');
       }
     } catch (error) {
       setStatus('Unable to create session');
@@ -23,12 +27,7 @@ export function useSession() {
 
   useEffect(() => {
     createSession();
-    const refreshInterval = setInterval(() => {
-      createSession();
-    }, 15000);
-
-    return () => clearInterval(refreshInterval);
   }, []);
 
-  return { sessionId, status, createSession };
+  return { sessionId, sessionExpiresAt, status, createSession };
 }

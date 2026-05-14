@@ -13,7 +13,12 @@ function App() {
   const [files, setFiles] = useState([]);
   const [socket, setSocket] = useState(null);
 
-  const { sessionId: generatedSessionId, status: sessionStatus, createSession } = useSession();
+  const {
+    sessionId: generatedSessionId,
+    sessionExpiresAt,
+    status: sessionStatus,
+    createSession,
+  } = useSession();
 
   useEffect(() => {
     if (sessionParam) {
@@ -87,6 +92,7 @@ function App() {
   return (
     <LaptopView
       sessionId={sessionId}
+      sessionExpiresAt={sessionExpiresAt}
       files={files}
       status={status}
       onCreateSession={createSession}
