@@ -10,9 +10,18 @@ function normalizeResourceType(rt) {
   return "image";
 }
 
-/** Delivery URL that sets Content-Disposition attachment (works with Cloudinary SDK). */
+/**
+ * Value for fl_attachment:… must not contain ".", ":", "/", spaces, etc. or Cloudinary returns HTTP 400.
+ * @see https://cloudinary.com/documentation/image_delivery_options
+ */
+function cloudinarySafeAttachmentFilename(name) {
+  const n = String(name || "download").trim() || "download";
+  return n.replace(/[^a-zA-Z0-9_-]/g, "_").replace(/_+/g, "_").slice(0, 120) || "download";
+}
+
+/** Delivery URL that sets Content-Disposition attachment (Cloudinary SDK). */
 function buildCloudinaryDownloadUrl(publicId, resourceType, filename) {
-  const safe = String(filename || "download").replace(/[^\w.\-]/g, "_").slice(0, 150) || "download";
+  const safe = cloudinarySafeAttachmentFilename(filename);
   const rt = normalizeResourceType(resourceType);
   return cloudinary.url(publicId, {
     resource_type: rt,
