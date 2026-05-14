@@ -15,6 +15,7 @@ import sessionRoutes from "./src/routes/sessionRoutes.js";
 import app from "./app.js";
 import { File } from "./src/models/files.models.js";
 import { fileTtlMinutes } from "./src/config/fileRetention.js";
+import { maxFileSizeBytes, maxFileSizeMiBLabel } from "./src/config/uploadLimits.js";
 import cloudinary from "./src/config/cloudinary.js";
 import { setSocketServer } from "./src/config/socket.js";
 
@@ -142,7 +143,8 @@ const startServer = async () => {
     }
     app.disable("x-powered-by");
 
-    app.use(express.json({ limit: "100mb" }));
+    const jsonLimitMb = Math.max(1, Math.ceil(maxFileSizeBytes() / (1024 * 1024)));
+    app.use(express.json({ limit: `${jsonLimitMb}mb` }));
     app.use(
       cors({
         origin: corsOrigin,
@@ -201,6 +203,9 @@ const startServer = async () => {
 
     await connectDB();
     console.info(`File retention: FILE_TTL_MINUTES=${fileTtlMinutes()} (Cloudinary cleanup every 30s)`);
+    console.info(
+      `Upload limit: max ${maxFileSizeMiBLabel()} per file (MAX_FILE_SIZE_BYTES=${maxFileSizeBytes()})`
+    );
     await deleteExpiredFiles();
     setInterval(deleteExpiredFiles, 30 * 1000);
 
@@ -241,7 +246,9 @@ const startServer = async () => {
       if (res.headersSent) return next(err);
       if (err instanceof multer.MulterError) {
         if (err.code === "LIMIT_FILE_SIZE") {
-          return res.status(400).json({ message: "File too large (max 100 MB per file)" });
+          return res.status(400).json({
+            message: `Each file must be at most ${maxFileSizeMiBLabel()}. Set MAX_FILE_SIZE_BYTES on the server to match your Cloudinary plan.`,
+          });
         }
         return res.status(400).json({ message: err.message });
       }

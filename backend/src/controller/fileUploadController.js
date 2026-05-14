@@ -1,6 +1,7 @@
 import cloudinary from "../config/cloudinary.js";
 import streamifier from "streamifier";
 import { fileTtlMs } from "../config/fileRetention.js";
+import { maxFileSizeMiBLabel } from "../config/uploadLimits.js";
 import { File } from "../models/files.models.js";
 import { Session } from "../models/session.models.js";
 import { getSocketServer } from "../config/socket.js";
@@ -138,6 +139,12 @@ export const uploadFile = async (req, res) => {
       sessionId: savedFileRecord.sessionId,
     });
   } catch (error) {
+    const msg = error?.message || String(error);
+    if (/10485760|file size|too large|Maximum|max file size|size too large|higher limits/i.test(msg)) {
+      return res.status(400).json({
+        message: `File too large for your storage plan. This server allows ${maxFileSizeMiBLabel()} per file by default (Cloudinary Free = 10 MiB). Compress the file, or set MAX_FILE_SIZE_BYTES on the API after upgrading Cloudinary.`,
+      });
+    }
     res.status(500).json({
       message: error.message,
     });
