@@ -1,11 +1,98 @@
 import { useEffect, useState } from 'react';
 import { QRCodeSVG } from 'qrcode.react';
+import { cloudinaryAttachmentUrl } from '../lib/cloudinaryAttachmentUrl';
 
 function formatRemaining(totalSeconds) {
   if (totalSeconds <= 0) return '0:00';
   const m = Math.floor(totalSeconds / 60);
   const s = totalSeconds % 60;
   return `${m}:${String(s).padStart(2, '0')}`;
+}
+
+function fileKind(file) {
+  const m = file.mimetype || '';
+  const name = file.filename || '';
+  if (m.startsWith('image/')) return 'image';
+  if (/\.(jpe?g|png|gif|webp|bmp|svg)$/i.test(name)) return 'image';
+  if (m.startsWith('video/')) return 'video';
+  if (/\.(mp4|webm|ogg|mov)$/i.test(name)) return 'video';
+  if (m === 'application/pdf' || /\.pdf$/i.test(name)) return 'pdf';
+  return 'other';
+}
+
+function IncomingFileCard({ file }) {
+  const kind = fileKind(file);
+  const downloadHref = file.download_url || cloudinaryAttachmentUrl(file.url, file.filename);
+  const btnStyle = {
+    display: 'inline-block',
+    marginRight: 8,
+    marginTop: 8,
+    padding: '8px 14px',
+    borderRadius: 6,
+    border: '1px solid #ccc',
+    background: '#f4f4f5',
+    color: '#111',
+    textDecoration: 'none',
+    fontSize: '14px',
+    cursor: 'pointer',
+  };
+
+  return (
+    <li
+      style={{
+        listStyle: 'none',
+        marginBottom: 20,
+        padding: 16,
+        border: '1px solid #e4e4e7',
+        borderRadius: 10,
+        background: '#fafafa',
+        maxWidth: 560,
+      }}
+    >
+      <div style={{ fontWeight: 600, marginBottom: 10 }}>{file.filename}</div>
+
+      {kind === 'image' ? (
+        <img
+          src={file.url}
+          alt={file.filename}
+          style={{
+            maxWidth: '100%',
+            maxHeight: 420,
+            borderRadius: 8,
+            display: 'block',
+            background: '#fff',
+          }}
+        />
+      ) : null}
+
+      {kind === 'video' ? (
+        <video
+          src={file.url}
+          controls
+          style={{ maxWidth: '100%', maxHeight: 420, borderRadius: 8, display: 'block', background: '#000' }}
+        />
+      ) : null}
+
+      {kind === 'pdf' ? (
+        <p style={{ margin: '8px 0', color: '#52525b', fontSize: '14px' }}>
+          PDF — use Download to save a copy, or Open to view in the browser.
+        </p>
+      ) : null}
+
+      {kind === 'other' ? (
+        <p style={{ margin: '8px 0', color: '#52525b', fontSize: '14px' }}>Preview not available for this type.</p>
+      ) : null}
+
+      <div>
+        <a href={downloadHref} style={btnStyle} download={file.filename}>
+          Download
+        </a>
+        <a href={file.url} target="_blank" rel="noreferrer" style={{ ...btnStyle, background: '#fff' }}>
+          Open in new tab
+        </a>
+      </div>
+    </li>
+  );
 }
 
 function LaptopView({ sessionId, sessionExpiresAt, files, status, onCreateSession }) {
@@ -62,14 +149,13 @@ function LaptopView({ sessionId, sessionExpiresAt, files, status, onCreateSessio
       )}
       <div style={{ marginTop: '20px' }}>
         <h2>Incoming files</h2>
+        <p style={{ color: '#71717a', fontSize: '14px', maxWidth: 560 }}>
+          Files are removed from Cloudinary about 15 minutes after upload (same as the server cleanup job).
+        </p>
         {files.length ? (
-          <ul>
+          <ul style={{ paddingLeft: 0 }}>
             {files.map((file, index) => (
-              <li key={`${file.public_id}-${index}`}>
-                <a href={file.url} target="_blank" rel="noreferrer">
-                  {file.filename}
-                </a>
-              </li>
+              <IncomingFileCard key={`${file.public_id}-${index}`} file={file} />
             ))}
           </ul>
         ) : (

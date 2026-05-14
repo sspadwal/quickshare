@@ -3,6 +3,19 @@ import streamifier from "streamifier";
 import { File } from "../models/files.models.js";
 import { Session } from "../models/session.models.js";
 import { getSocketServer } from "../config/socket.js";
+import { cloudinaryAttachmentUrl } from "../utils/cloudinaryAttachmentUrl.js";
+
+function filePayload(result, file) {
+  const url = result.secure_url;
+  return {
+    filename: file.originalname,
+    url,
+    public_id: result.public_id,
+    mimetype: file.mimetype || "",
+    resource_type: result.resource_type || "auto",
+    download_url: cloudinaryAttachmentUrl(url, file.originalname),
+  };
+}
 
 export const uploadFile = async (req, res) => {
   try {
@@ -59,21 +72,13 @@ export const uploadFile = async (req, res) => {
     if (io) {
       io.to(sessionId).emit('file.uploaded', {
         sessionId,
-        files: uploadResults.map((result, index) => ({
-          filename: files[index].originalname,
-          url: result.secure_url,
-          public_id: result.public_id,
-        })),
+        files: uploadResults.map((result, index) => filePayload(result, files[index])),
       });
     }
 
     res.status(200).json({
       message: "Upload successful",
-      files: uploadResults.map((result, index) => ({
-        filename: files[index].originalname,
-        url: result.secure_url,
-        public_id: result.public_id,
-      })),
+      files: uploadResults.map((result, index) => filePayload(result, files[index])),
       sessionId: savedFileRecord.sessionId,
     });
 

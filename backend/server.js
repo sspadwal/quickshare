@@ -93,7 +93,7 @@ const startServer = async () => {
     }
     app.disable("x-powered-by");
 
-    app.use(express.json({ limit: "12mb" }));
+    app.use(express.json({ limit: "100mb" }));
     app.use(
       cors({
         origin: corsOrigin,
@@ -187,7 +187,7 @@ const startServer = async () => {
       if (res.headersSent) return next(err);
       if (err instanceof multer.MulterError) {
         if (err.code === "LIMIT_FILE_SIZE") {
-          return res.status(400).json({ message: "File too large" });
+          return res.status(400).json({ message: "File too large (max 100 MB per file)" });
         }
         return res.status(400).json({ message: err.message });
       }

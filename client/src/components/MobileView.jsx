@@ -13,6 +13,7 @@ function MobileView({ sessionId, onUpload, status }) {
     <div style={{ padding: '20px' }}>
       <h1>QuickShare Mobile Upload</h1>
       <p>Session: {sessionId}</p>
+      <p style={{ color: '#71717a', fontSize: '14px' }}>Up to 100 MB per file.</p>
       <form onSubmit={handleSubmit}>
         <input
           type="file"
