@@ -3,8 +3,7 @@ import { io } from 'socket.io-client';
 import LaptopView from './components/LaptopView';
 import MobileView from './components/MobileView';
 import { useSession } from './hooks/useSession';
-
-const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000';
+import { getBackendBaseUrl } from './lib/apiBase';
 
 function App() {
   const searchParams = useMemo(() => new URLSearchParams(window.location.search), []);
@@ -28,7 +27,8 @@ function App() {
   useEffect(() => {
     if (!sessionId) return;
 
-    const newSocket = io(BACKEND_URL, { transports: ['websocket'] });
+    const backendUrl = getBackendBaseUrl();
+    const newSocket = io(backendUrl, { transports: ['websocket'] });
     setSocket(newSocket);
 
     newSocket.on('connect', () => {
@@ -63,7 +63,7 @@ function App() {
     });
 
     try {
-      const response = await fetch(`${BACKEND_URL}/api/file/upload?session=${sessionId}`, {
+      const response = await fetch(`${getBackendBaseUrl()}/api/file/upload?session=${sessionId}`, {
         method: 'POST',
         body: formData,
       });

@@ -1,6 +1,5 @@
 import { useState, useEffect } from 'react';
-
-const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000';
+import { getBackendBaseUrl } from '../lib/apiBase';
 
 export function useSession() {
   const [sessionId, setSessionId] = useState('');
@@ -8,7 +7,7 @@ export function useSession() {
 
   const createSession = async () => {
     try {
-      const response = await fetch(`${BACKEND_URL}/api/session/new`, {
+      const response = await fetch(`${getBackendBaseUrl()}/api/session/new`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
       });
