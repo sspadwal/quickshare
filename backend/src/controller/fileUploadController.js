@@ -1,5 +1,6 @@
 import cloudinary from "../config/cloudinary.js";
 import streamifier from "streamifier";
+import { fileTtlMs } from "../config/fileRetention.js";
 import { File } from "../models/files.models.js";
 import { Session } from "../models/session.models.js";
 import { getSocketServer } from "../config/socket.js";
@@ -120,7 +121,7 @@ export const uploadFile = async (req, res) => {
       publicIds: uploadResults.map((result) => result.public_id),
       urls: uploadResults.map((result) => result.secure_url),
       resourceTypes: uploadResults.map((result) => normalizeResourceType(result.resource_type)),
-      expiresAt: new Date(Date.now() + 15 * 60 * 1000),
+      expiresAt: new Date(Date.now() + fileTtlMs()),
     });
 
     const io = getSocketServer();

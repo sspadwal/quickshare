@@ -195,9 +195,10 @@ function LaptopView({ sessionId, sessionExpiresAt, mobileConnected, files, statu
       <div style={{ marginTop: '20px' }}>
         <h2>Incoming files</h2>
         <p style={{ color: '#71717a', fontSize: '14px', maxWidth: 560 }}>
-          Files are removed from Cloudinary about 15 minutes after upload. If uploads never disappear from
-          Cloudinary, remove any old TTL index on <code>files.expiresAt</code> in MongoDB (see backend{' '}
-          <code>.env.example</code>).
+          The server deletes each upload from Cloudinary after the retention window (default 15 minutes, override with{' '}
+          <code>FILE_TTL_MINUTES</code> on the API). On hosts that sleep (e.g. Render free), cleanup runs when the
+          server is awake. If assets never leave Cloudinary, check API logs for destroy errors and that Mongo still has
+          the file row until delete succeeds.
         </p>
         {files.length ? (
           <ul style={{ paddingLeft: 0 }}>

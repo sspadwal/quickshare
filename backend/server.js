@@ -14,6 +14,7 @@ import fileRoutes from "./src/routes/fileRoutes.js";
 import sessionRoutes from "./src/routes/sessionRoutes.js";
 import app from "./app.js";
 import { File } from "./src/models/files.models.js";
+import { fileTtlMinutes } from "./src/config/fileRetention.js";
 import cloudinary from "./src/config/cloudinary.js";
 import { setSocketServer } from "./src/config/socket.js";
 
@@ -60,6 +61,7 @@ function resolveCorsOrigin() {
   return isProd ? false : true;
 }
 
+/** @returns {Promise<boolean>} */
 async function destroyCloudinaryAsset(publicId, preferredType) {
   const order =
     preferredType && ["image", "raw", "video"].includes(preferredType)
@@ -69,14 +71,23 @@ async function destroyCloudinaryAsset(publicId, preferredType) {
     try {
       const r = await cloudinary.uploader.destroy(publicId, {
         resource_type,
+        type: "upload",
         invalidate: true,
       });
-      if (r.result === "ok" || r.result === "not found") return;
+      if (r?.result === "ok" || r?.result === "not found") return true;
+      console.warn(
+        `Cloudinary destroy unexpected result public_id=${publicId} resource_type=${resource_type}:`,
+        r
+      );
     } catch (e) {
-      /* try next resource_type */
+      console.warn(
+        `Cloudinary destroy error public_id=${publicId} resource_type=${resource_type}:`,
+        e?.message || e
+      );
     }
   }
-  console.warn("Cloudinary destroy failed for public_id:", publicId);
+  console.error("Cloudinary destroy failed for all resource types, public_id:", publicId);
+  return false;
 }
 
 const deleteExpiredFiles = async () => {
@@ -85,13 +96,32 @@ const deleteExpiredFiles = async () => {
     const expiredFiles = await File.find({ expiresAt: { $lte: now } });
     if (!expiredFiles.length) return;
 
+    let removedFromCloudinary = 0;
+    let skippedDocs = 0;
+
     for (const file of expiredFiles) {
+      let allDestroyed = true;
       for (let i = 0; i < file.publicIds.length; i++) {
         const publicId = file.publicIds[i];
         const preferred = file.resourceTypes?.[i];
-        await destroyCloudinaryAsset(publicId, preferred);
+        const ok = await destroyCloudinaryAsset(publicId, preferred);
+        if (!ok) allDestroyed = false;
       }
-      await File.deleteOne({ _id: file._id });
+      if (allDestroyed) {
+        await File.deleteOne({ _id: file._id });
+        removedFromCloudinary += file.publicIds.length;
+      } else {
+        skippedDocs += 1;
+        console.error(
+          `File doc ${file._id} kept in DB; Cloudinary delete failed — will retry on next sweep`
+        );
+      }
+    }
+
+    if (removedFromCloudinary || skippedDocs) {
+      console.info(
+        `deleteExpiredFiles: expired batch — cloudinary assets removed=${removedFromCloudinary}, docs skipped=${skippedDocs}`
+      );
     }
   } catch (error) {
     console.error("Error deleting expired files:", error);
@@ -170,8 +200,9 @@ const startServer = async () => {
     }
 
     await connectDB();
+    console.info(`File retention: FILE_TTL_MINUTES=${fileTtlMinutes()} (Cloudinary cleanup every 30s)`);
     await deleteExpiredFiles();
-    setInterval(deleteExpiredFiles, 60 * 1000);
+    setInterval(deleteExpiredFiles, 30 * 1000);
 
     const httpServer = createServer(app);
     const io = new Server(httpServer, {
